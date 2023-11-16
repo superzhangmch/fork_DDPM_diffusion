@@ -86,6 +86,9 @@ def attn_block(x, *, name, temb):
 
 def model(x, *, t, y, name, num_classes, reuse=tf.AUTO_REUSE, ch, out_ch, ch_mult=(1, 2, 4, 8), num_res_blocks,
           attn_resolutions, dropout=0., resamp_with_conv=True):
+  '''
+  注意这里Unet的实现，和openai<<improved DDPM>>pytorch Unet实现，大的结构是一模一样的。看来后者的network也是从DDPM原始实现改出去的
+  '''
   B, S, _, _ = x.shape
   assert x.dtype == tf.float32 and x.shape[2] == S
   assert t.dtype in [tf.int32, tf.int64]
@@ -114,10 +117,11 @@ def model(x, *, t, y, name, num_classes, reuse=tf.AUTO_REUSE, ch, out_ch, ch_mul
             h = attn_block(h, name='attn_{}'.format(i_block), temb=temb)
           hs.append(h)
         # Downsample
-        if i_level != num_resolutions - 1:
+        if i_level != num_resolutions - 1: # 最小分辨率要进入middle block的时候，不降采样
           hs.append(downsample(hs[-1], name='downsample', with_conv=resamp_with_conv))
 
     # Middle
+    # 进入与走出middle block的时候，不升降采样
     with tf.variable_scope('mid'):
       h = hs[-1]
       h = resnet_block(h, temb=temb, name='block_1', dropout=dropout)
@@ -129,7 +133,7 @@ def model(x, *, t, y, name, num_classes, reuse=tf.AUTO_REUSE, ch, out_ch, ch_mul
       with tf.variable_scope('up_{}'.format(i_level)):
         # Residual blocks for this resolution
         for i_block in range(num_res_blocks + 1):
-          h = resnet_block(tf.concat([h, hs.pop()], axis=-1), name='block_{}'.format(i_block),
+          h = resnet_block(tf.concat([h, hs.pop()], axis=-1), name='block_{}'.format(i_block), # 每个resnet_block都作skip connection。凡此种种都是和《imagen》的efficient Unet不一样的
                            temb=temb, out_ch=ch * ch_mult[i_level], dropout=dropout)
           if h.shape[1] in attn_resolutions:
             h = attn_block(h, name='attn_{}'.format(i_block), temb=temb)
