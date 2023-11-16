@@ -86,6 +86,9 @@ def attn_block(x, *, name, temb):
 
 def model(x, *, t, y, name, num_classes, reuse=tf.AUTO_REUSE, ch, out_ch, ch_mult=(1, 2, 4, 8), num_res_blocks,
           attn_resolutions, dropout=0., resamp_with_conv=True):
+  '''
+  注意：该unet实现，和openai的<<improved DDPM>>github实现，是一样的。只是后者是pytorch。
+  '''
   B, S, _, _ = x.shape
   assert x.dtype == tf.float32 and x.shape[2] == S
   assert t.dtype in [tf.int32, tf.int64]
@@ -114,10 +117,11 @@ def model(x, *, t, y, name, num_classes, reuse=tf.AUTO_REUSE, ch, out_ch, ch_mul
             h = attn_block(h, name='attn_{}'.format(i_block), temb=temb)
           hs.append(h)
         # Downsample
-        if i_level != num_resolutions - 1:
+        if i_level != num_resolutions - 1: # 最后一个resolution后不作降采样
           hs.append(downsample(hs[-1], name='downsample', with_conv=resamp_with_conv))
 
     # Middle
+    # middle block的resolution保持和前后阶段的一致。
     with tf.variable_scope('mid'):
       h = hs[-1]
       h = resnet_block(h, temb=temb, name='block_1', dropout=dropout)
